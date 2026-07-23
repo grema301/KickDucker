@@ -1,0 +1,25 @@
+# JUCE / Projucer generated
+JuceLibraryCode/
+Builds/
+Build/
+*.jucer.bak
+
+# CMake
+build/
+cmake-build-*/
+
+# Inno Setup output
+output/
+*.exe
+
+# VST3 build artifacts
+*.vst3/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# IDE
+.vs/
+*.vcxproj.user
+.vscode/
