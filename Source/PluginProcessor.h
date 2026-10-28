@@ -37,46 +37,47 @@ public:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 
     //==========================================================================
-    // Atomics — written on audio thread, read by UI timer at 30Hz.
+    // Atomics - written on audio thread, read by UI timer at 30Hz.
     // memory_order_relaxed throughout: stale display values are fine.
-    std::atomic<float> detectedFrequencyHz  { 0.0f };
+    std::atomic<float> detectedFrequencyHz  { 0.0f };   // 0 until a pitch has been detected
     std::atomic<float> sidechainActive      { 0.0f };
     std::atomic<float> currentAppliedGainDB { 0.0f };
     std::atomic<float> sidechainLevelDB     { -80.0f }; // RMS level of sidechain input
 
     // Allows the editor to hold a WeakReference that safely becomes nullptr
-    // when this processor is destroyed — prevents the timer crash on FL disable.
+    // when this processor is destroyed - prevents the timer crash on FL disable.
     JUCE_DECLARE_WEAK_REFERENCEABLE(KickDuckerAudioProcessor)
 
     //==========================================================================
-    // Spectrum FIFO — audio thread writes pre-processing main signal samples,
-    // UI thread reads and runs FFT for the spectrum display.
+    // Spectrum FIFO - audio thread writes the main input (pre-processing),
+    // UI thread reads and runs the FFT. The audio thread only writes while an
+    // editor is open (spectrumActive), so the FIFO never holds stale audio.
     static constexpr int kSpectrumFifoSize = 4096;
     juce::AbstractFifo            spectrumFifo { kSpectrumFifoSize };
     std::array<float, kSpectrumFifoSize> spectrumFifoData {};
+    std::atomic<bool>             spectrumActive { false };
 
 private:
     //==========================================================================
-    // DSP — audio thread only
+    // DSP - audio thread only
     PitchDetector pitchDetector;
 
-    // Fundamental — one biquad per channel
+    // Fundamental - one biquad per channel
     BiquadFilter eqL, eqR;
 
-    // Harmonics — three additional biquads per channel (2nd, 3rd, 4th)
+    // Harmonics - three additional biquads per channel (2nd, 3rd, 4th)
     BiquadFilter h2L, h2R;
     BiquadFilter h3L, h3R;
     BiquadFilter h4L, h4R;
 
-    // Dry signal buffer for wet/dry mix — pre-allocated in prepareToPlay
-    juce::AudioBuffer<float> dryBuffer;
+    void resetFilters() noexcept;
 
     //==========================================================================
-    // Smoothed values — all audio-thread-only
+    // Smoothed values - all audio-thread-only
     juce::SmoothedValue<float> smoothedFrequency;
     juce::SmoothedValue<float> smoothedQ;
     juce::SmoothedValue<float> smoothedAppliedGain;
-    juce::SmoothedValue<float> smoothedMix;
+    juce::SmoothedValue<float> smoothedMix;        // also carries the bypass crossfade
     juce::SmoothedValue<float> smoothedOutputGain; // linear gain
 
     //==========================================================================
@@ -86,10 +87,9 @@ private:
     float releaseCoeff   = 0.0f;
 
     //==========================================================================
-    // Frequency lock state
-    // When FREQ_LOCK is enabled, we capture the current frequency and hold it.
-    float lockedFrequency = 0.0f;
-    bool  lastLockState   = false;
+    // Pitch / lock state
+    bool  hasPitch        = false;   // true once a frequency has been detected (or locked)
+    std::atomic<float> lockedFrequency { 0.0f };  // 0 = not locked. Atomic: also read when saving state
 
     //==========================================================================
     // Session state
@@ -97,13 +97,13 @@ private:
     int    coeffUpdateCounter = 0;
     static constexpr int kCoeffUpdateInterval = 32;
 
-    // Change guards — only update coefficients when parameter values change
+    // Change guards - only update coefficients when parameter values change
     float lastAttackMs    = -1.0f;
     float lastReleaseMs   = -1.0f;
     float lastSmoothingMs = -1.0f;
 
     //==========================================================================
-    // Raw parameter pointers — set once in constructor, valid for plugin lifetime
+    // Raw parameter pointers - set once in constructor, valid for plugin lifetime
     std::atomic<float>* pAttenuation  = nullptr;
     std::atomic<float>* pQ            = nullptr;
     std::atomic<float>* pSmoothing    = nullptr;

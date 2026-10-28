@@ -2,62 +2,55 @@
 #include "PluginEditor.h"
 
 //==============================================================================
-namespace Theme
+juce::Rectangle<int> KickDuckerAudioProcessorEditor::cardBounds(int index)
 {
-    const juce::Colour background  { 0xff12121f };
-    const juce::Colour headerBg    { 0xff0a0a15 };
-    const juce::Colour panelBg     { 0xff191928 };
-    const juce::Colour panelBorder { 0xff28284a };
-    const juce::Colour accent      { 0xff00e5ff };
-    const juce::Colour accentLock  { 0xffffaa00 };
-    const juce::Colour textPrimary { 0xffffffff };
-    const juce::Colour textSecond  { 0xff8888aa };
-    const juce::Colour textDim     { 0xff444466 };
-    const juce::Colour danger      { 0xffff4455 };
+    int x = kMargin;
+    for (int i = 0; i < index; ++i)
+        x += kCardKnobs[i] * kUnit + kCardGap;
+
+    return { x, kCardsY, kCardKnobs[index] * kUnit, kCardsH };
 }
 
 //==============================================================================
 KickDuckerAudioProcessorEditor::KickDuckerAudioProcessorEditor(KickDuckerAudioProcessor& p)
     : AudioProcessorEditor(&p), audioProcessor(p)
 {
-    setSize(700, 500);
-    setResizable(true, true);
-    setResizeLimits(600, 440, 1200, 900);
+    using namespace KDTheme;
 
-    // --- EQ Display ---
-    addAndMakeVisible(eqDisplay);
+    setLookAndFeel(&laf);
 
-    // --- DETECTION ---
-    setupRotary(smoothingSlider, smoothingLabel, "Smoothing", " ms");
-    setupToggle(noteQuantizeButton);
+    addAndMakeVisible(content);
+    content.addAndMakeVisible(eqDisplay);
+    content.addAndMakeVisible(sidechainMeter);
 
-    freqLockButton.setClickingTogglesState(true);
-    freqLockButton.setColour(juce::TextButton::buttonColourId,   Theme::panelBg);
-    freqLockButton.setColour(juce::TextButton::buttonOnColourId, Theme::accentLock.withAlpha(0.85f));
-    freqLockButton.setColour(juce::TextButton::textColourOffId,  Theme::textSecond);
-    freqLockButton.setColour(juce::TextButton::textColourOnId,   juce::Colours::black);
-    addAndMakeVisible(freqLockButton);
+    // --- TRACKING ---
+    setupRotary(smoothingSlider, smoothingLabel, "SMOOTHING",
+                "How slowly the notch glides to a newly detected pitch. Lower = snappier, higher = steadier.");
+    setupRotary(attackSlider,  attackLabel,  "ATTACK",
+                "How fast the notch digs in when the sidechain gets loud.");
+    setupRotary(releaseSlider, releaseLabel, "RELEASE",
+                "How fast the notch lets go once the sidechain falls away.");
 
-    // --- DYNAMICS ---
-    setupRotary(attackSlider,  attackLabel,  "Attack",  " ms");
-    setupRotary(releaseSlider, releaseLabel, "Release", " ms");
-
-    // --- EQ ---
-    setupRotary(attenuationSlider, attenuationLabel, "Depth",     " dB");
-    setupRotary(qWidthSlider,      qWidthLabel,      "Q Width",   "");
-    setupRotary(harmonicAmtSlider, harmonicAmtLabel, "Harmonics", "");
+    // --- NOTCH ---
+    setupRotary(attenuationSlider, attenuationLabel, "DEPTH",
+                "Maximum cut at the detected frequency (reached when the sidechain is at -12 dBFS or louder).",
+                KnobStyle::Inverted);
+    setupRotary(qWidthSlider, qWidthLabel, "Q",
+                "Notch width. Higher Q = narrower notch.");
+    setupRotary(harmonicAmtSlider, harmonicAmtLabel, "HARMONICS",
+                "Also duck the 2nd, 3rd and 4th harmonics (70% / 50% / 30% of the Depth, scaled by this knob).");
 
     // --- OUTPUT ---
-    setupRotary(mixSlider,        mixLabel,        "Mix",      "");
-    setupRotary(outputGainSlider, outputGainLabel, "Out Gain", " dB");
+    setupRotary(mixSlider, mixLabel, "MIX",
+                "Blend between the original signal (0%) and the ducked signal (100%).");
+    setupRotary(outputGainSlider, outputGainLabel, "OUT GAIN",
+                "Make-up gain to compensate for level lost to the notch.",
+                KnobStyle::Bipolar);
 
-    // --- Bypass ---
-    bypassButton.setClickingTogglesState(true);
-    bypassButton.setColour(juce::TextButton::buttonColourId,   Theme::panelBg);
-    bypassButton.setColour(juce::TextButton::buttonOnColourId, Theme::danger.withAlpha(0.8f));
-    bypassButton.setColour(juce::TextButton::textColourOffId,  Theme::textSecond);
-    bypassButton.setColour(juce::TextButton::textColourOnId,   juce::Colours::white);
-    addAndMakeVisible(bypassButton);
+    // --- Chips ---
+    setupChip(noteQuantizeButton, accent, "Snap the detected pitch to the nearest note so the notch doesn't wobble.");
+    setupChip(freqLockButton,     amber,  "Freeze the notch at its current frequency.");
+    setupChip(bypassButton,       danger, "Bypass the effect (crossfades, so it won't click).");
 
     // --- APVTS Attachments ---
     attenuationAttachment  = std::make_unique<SliderAttachment>(audioProcessor.apvts, "ATTENUATION",  attenuationSlider);
@@ -65,20 +58,151 @@ KickDuckerAudioProcessorEditor::KickDuckerAudioProcessorEditor(KickDuckerAudioPr
     smoothingAttachment    = std::make_unique<SliderAttachment>(audioProcessor.apvts, "SMOOTHING",     smoothingSlider);
     attackAttachment       = std::make_unique<SliderAttachment>(audioProcessor.apvts, "ATTACK",        attackSlider);
     releaseAttachment      = std::make_unique<SliderAttachment>(audioProcessor.apvts, "RELEASE",       releaseSlider);
-    harmonicAmtAttachment  = std::make_unique<SliderAttachment>(audioProcessor.apvts, "HARMONIC_AMT", harmonicAmtSlider);
+    harmonicAmtAttachment  = std::make_unique<SliderAttachment>(audioProcessor.apvts, "HARMONIC_AMT",  harmonicAmtSlider);
     mixAttachment          = std::make_unique<SliderAttachment>(audioProcessor.apvts, "MIX",           mixSlider);
-    outputGainAttachment   = std::make_unique<SliderAttachment>(audioProcessor.apvts, "OUTPUT_GAIN",  outputGainSlider);
-    noteQuantizeAttachment = std::make_unique<ButtonAttachment>(audioProcessor.apvts, "NOTE_QUANTIZE",noteQuantizeButton);
+    outputGainAttachment   = std::make_unique<SliderAttachment>(audioProcessor.apvts, "OUTPUT_GAIN",   outputGainSlider);
+    noteQuantizeAttachment = std::make_unique<ButtonAttachment>(audioProcessor.apvts, "NOTE_QUANTIZE", noteQuantizeButton);
     freqLockAttachment     = std::make_unique<ButtonAttachment>(audioProcessor.apvts, "FREQ_LOCK",     freqLockButton);
     bypassAttachment       = std::make_unique<ButtonAttachment>(audioProcessor.apvts, "BYPASS",        bypassButton);
 
-    processorRef = &audioProcessor; // Must be last — enables crash-safe timer
+    // Value text with units. This MUST come after the attachments: a SliderAttachment
+    // installs its own text functions on the slider, which silently replaces
+    // setTextValueSuffix() - that's why the old knobs showed numbers with no units.
+    auto msText   = [](double v) { return juce::String(v, v < 100.0 ? 1 : 0) + " ms"; };
+    auto pctText  = [](double v) { return juce::String((int) std::round(v * 100.0)) + "%"; };
+    auto numParse = [](const juce::String& t) { return parseNumber(t); };
+    auto pctParse = [](const juce::String& t) { return parseNumber(t) / 100.0; };
+
+    smoothingSlider.textFromValueFunction   = [](double v) { return juce::String((int) std::round(v)) + " ms"; };
+    attackSlider.textFromValueFunction      = msText;
+    releaseSlider.textFromValueFunction     = msText;
+    attenuationSlider.textFromValueFunction = [](double v) { return formatDB(v, 1); };
+    qWidthSlider.textFromValueFunction      = [](double v) { return juce::String(v, 2); };
+    harmonicAmtSlider.textFromValueFunction = pctText;
+    mixSlider.textFromValueFunction         = pctText;
+    outputGainSlider.textFromValueFunction  = [](double v) { return formatDB(v, 1, true); };
+
+    for (auto* s : { &smoothingSlider, &attackSlider, &releaseSlider, &attenuationSlider,
+                     &qWidthSlider, &outputGainSlider })
+        s->valueFromTextFunction = numParse;
+    harmonicAmtSlider.valueFromTextFunction = pctParse;
+    mixSlider.valueFromTextFunction         = pctParse;
+
+    for (auto* s : { &smoothingSlider, &attackSlider, &releaseSlider, &attenuationSlider,
+                     &qWidthSlider, &harmonicAmtSlider, &mixSlider, &outputGainSlider })
+        s->updateText();
+
+    // --- Layout (design space, 760 x 520) ---
+    eqDisplay.setBounds(kMargin, kDisplayY, kBaseW - kMargin * 2, kDisplayH);
+
+    const int chipW = 66, chipH = 22;
+    const int chipY = kDisplayY + (int) ((EQDisplayComponent::kTopStrip - (float) chipH) * 0.5f);
+    const int lockX = kBaseW - kMargin - 14 - chipW;
+    freqLockButton    .setBounds(lockX,                 chipY, chipW, chipH);
+    noteQuantizeButton.setBounds(lockX - 6 - chipW,     chipY, chipW, chipH);
+
+    sidechainMeter.setBounds(300, 11, 300, 30);
+    bypassButton  .setBounds(kBaseW - kMargin - 88, 15, 88, 22);
+
+    placeKnob(0, 0, smoothingSlider,   smoothingLabel);
+    placeKnob(0, 1, attackSlider,      attackLabel);
+    placeKnob(0, 2, releaseSlider,     releaseLabel);
+    placeKnob(1, 0, attenuationSlider, attenuationLabel);
+    placeKnob(1, 1, qWidthSlider,      qWidthLabel);
+    placeKnob(1, 2, harmonicAmtSlider, harmonicAmtLabel);
+    placeKnob(2, 0, mixSlider,         mixLabel);
+    placeKnob(2, 1, outputGainSlider,  outputGainLabel);
+
+    // --- Display interaction: drag the ring = Depth, scroll = Q ---
+    // Each gesture is bracketed with begin/endChangeGesture so hosts record it as
+    // proper automation (same as turning the knob).
+    eqDisplay.onDragStart = [this]
+    {
+        if (processorRef == nullptr) return;
+        if (auto* prm = audioProcessor.apvts.getParameter("ATTENUATION")) prm->beginChangeGesture();
+    };
+    eqDisplay.onDepthDragged = [this](float db)
+    {
+        if (processorRef == nullptr) return;
+        if (auto* prm = audioProcessor.apvts.getParameter("ATTENUATION"))
+            prm->setValueNotifyingHost(prm->convertTo0to1(db));
+    };
+    eqDisplay.onDragEnd = [this]
+    {
+        if (processorRef == nullptr) return;
+        if (auto* prm = audioProcessor.apvts.getParameter("ATTENUATION")) prm->endChangeGesture();
+    };
+    eqDisplay.onQWheel = [this](float delta)
+    {
+        if (processorRef == nullptr) return;
+        if (auto* prm = audioProcessor.apvts.getParameter("Q_WIDTH"))
+        {
+            prm->beginChangeGesture();
+            prm->setValueNotifyingHost(juce::jlimit(0.0f, 1.0f, prm->getValue() + delta));
+            prm->endChangeGesture();
+        }
+    };
+
+    // --- Window: resizable, fixed aspect, scales the design space ---
+    setResizable(true, true);
+    setResizeLimits(kBaseW * 3 / 4, kBaseH * 3 / 4, kBaseW * 2, kBaseH * 2);
+    getConstrainer()->setFixedAspectRatio((double) kBaseW / (double) kBaseH);
+    setSize(kBaseW, kBaseH);
+
+    // --- Hook up the live data ---
+    pAttenuation = audioProcessor.apvts.getRawParameterValue("ATTENUATION");
+    pQ           = audioProcessor.apvts.getRawParameterValue("Q_WIDTH");
+    pHarmonicAmt = audioProcessor.apvts.getRawParameterValue("HARMONIC_AMT");
+    pFreqLock    = audioProcessor.apvts.getRawParameterValue("FREQ_LOCK");
+
+    // Start with a clean FIFO, then tell the audio thread we're listening.
+    // (While no editor is open the processor skips writing to it altogether.)
+    audioProcessor.spectrumFifo.reset();
+    audioProcessor.spectrumActive.store(true);
+
+    // The sliders were constructed (with their value text boxes) before our look-and-feel
+    // was attached, so ask every child to rebuild itself with it.
+    sendLookAndFeelChange();
+
+    processorRef = &audioProcessor; // Must be last - enables crash-safe timer
     startTimerHz(30);
 }
 
 KickDuckerAudioProcessorEditor::~KickDuckerAudioProcessorEditor()
 {
     stopTimer();
+
+    // Nothing may call back into the processor from here on
+    eqDisplay.onDragStart = nullptr;
+    eqDisplay.onDepthDragged = nullptr;
+    eqDisplay.onDragEnd = nullptr;
+    eqDisplay.onQWheel = nullptr;
+
+    if (processorRef != nullptr)
+    {
+        audioProcessor.spectrumActive.store(false);
+    }
+    else
+    {
+        // Some hosts (FL Studio's wrapper among them) can tear the processor down
+        // BEFORE the editor, e.g. when a mixer slot is switched off while the plugin
+        // window is open. The parameter attachments would then unregister themselves
+        // from parameters that no longer exist and crash, so in that case we let go of
+        // them without destroying them. It's a few hundred bytes, and only on that path.
+        (void) smoothingAttachment.release();
+        (void) attackAttachment.release();
+        (void) releaseAttachment.release();
+        (void) attenuationAttachment.release();
+        (void) qWidthAttachment.release();
+        (void) harmonicAmtAttachment.release();
+        (void) mixAttachment.release();
+        (void) outputGainAttachment.release();
+        (void) noteQuantizeAttachment.release();
+        (void) freqLockAttachment.release();
+        (void) bypassAttachment.release();
+    }
+
+    setLookAndFeel(nullptr);
 }
 
 //==============================================================================
@@ -91,33 +215,26 @@ void KickDuckerAudioProcessorEditor::timerCallback()
     if (!isShowing()) return;
 
     const float freq      = audioProcessor.detectedFrequencyHz.load(std::memory_order_relaxed);
-    const float scActive  = audioProcessor.sidechainActive.load(std::memory_order_relaxed);
+    const bool  scActive  = audioProcessor.sidechainActive.load(std::memory_order_relaxed) > 0.5f;
     const float appliedDB = audioProcessor.currentAppliedGainDB.load(std::memory_order_relaxed);
-
-    sidechainIsActive = (scActive > 0.5f);
-    lastAppliedGainDB = appliedDB;
-    sidechainLevelDB  = audioProcessor.sidechainLevelDB.load(std::memory_order_relaxed);
-
-    const float gainDB      = audioProcessor.apvts.getRawParameterValue("ATTENUATION")->load();
-    const float q           = audioProcessor.apvts.getRawParameterValue("Q_WIDTH")->load();
-    const float harmonicAmt = audioProcessor.apvts.getRawParameterValue("HARMONIC_AMT")->load();
-    const bool  locked      = audioProcessor.apvts.getRawParameterValue("FREQ_LOCK")->load() > 0.5f;
+    const float levelDB   = audioProcessor.sidechainLevelDB.load(std::memory_order_relaxed);
 
     double sr = audioProcessor.getSampleRate();
     if (sr <= 0.0) sr = 44100.0;
 
-    eqDisplay.setParameters(freq, gainDB, q, sr, sidechainIsActive, appliedDB, harmonicAmt, locked);
+    sidechainMeter.setState(levelDB, scActive);
+
+    eqDisplay.setParameters(freq, pAttenuation->load(), pQ->load(), sr, scActive, appliedDB,
+                            pHarmonicAmt->load(), pFreqLock->load() > 0.5f);
 
     drainSpectrumFifo();
-
     eqDisplay.repaint();
-    repaint(0, 0, getWidth(), kHeaderH); // Header only — sidechain dot
 }
 
 //==============================================================================
 void KickDuckerAudioProcessorEditor::drainSpectrumFifo()
 {
-    int available = audioProcessor.spectrumFifo.getNumReady();
+    const int available = audioProcessor.spectrumFifo.getNumReady();
     if (available <= 0) return;
 
     int s1, sz1, s2, sz2;
@@ -130,257 +247,114 @@ void KickDuckerAudioProcessorEditor::drainSpectrumFifo()
 //==============================================================================
 void KickDuckerAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    const int w = getWidth();
-    const int h = getHeight();
-
-    // Background
-    g.fillAll(Theme::background);
-
-    // Header
-    g.setColour(Theme::headerBg);
-    g.fillRect(0, 0, w, kHeaderH);
-    g.setColour(Theme::panelBorder);
-    g.drawHorizontalLine(kHeaderH, 0.0f, (float)w);
-
-    // Title
-    g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 13.5f, juce::Font::bold));
-    g.setColour(Theme::textPrimary);
-    g.drawText("KICK  DUCKER", 0, 0, w, kHeaderH, juce::Justification::centred);
-
-    // --- Sidechain section (header, left side) ---
-    // Shows: label | activity dot | live RMS level meter
-    // The meter tells the user instantly whether the sidechain is routed
-    // and receiving signal, without needing to open the mixer routing panel.
-    {
-        const int scX      = 12;
-        const int scY      = 8;
-        const int meterX   = scX + 76;
-        const int meterW   = 110;
-        const int meterH   = 10;
-        const int meterY   = scY + 12;
-
-        // "SIDECHAIN" label
-        g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 8.0f, juce::Font::bold));
-        g.setColour(Theme::textDim);
-        g.drawText("SIDECHAIN", scX, scY, 72, 12, juce::Justification::centredLeft);
-
-        // Activity dot
-        juce::Colour dot = sidechainIsActive ? Theme::accent : Theme::textDim;
-        g.setColour(dot);
-        g.fillEllipse((float)(scX + 74), (float)(scY + 1), 9.0f, 9.0f);
-        if (sidechainIsActive)
-        {
-            g.setColour(dot.withAlpha(0.2f));
-            g.fillEllipse((float)(scX + 71), (float)(scY - 2), 15.0f, 15.0f);
-        }
-
-        // Level meter bar
-        // Background track
-        g.setColour(juce::Colour(0xff0a0a14));
-        g.fillRoundedRectangle((float)meterX, (float)meterY,
-                               (float)meterW, (float)meterH, 2.0f);
-        g.setColour(juce::Colour(0xff1a1a30));
-        g.drawRoundedRectangle((float)meterX + 0.5f, (float)meterY + 0.5f,
-                               (float)meterW - 1.0f, (float)meterH - 1.0f, 2.0f, 0.8f);
-
-        // Fill: map -60dB..0dB → 0..meterW
-        const float normLevel = juce::jmap(sidechainLevelDB, -60.0f, 0.0f, 0.0f, 1.0f);
-        const float fillW     = juce::jlimit(0.0f, (float)meterW, normLevel * meterW);
-
-        if (fillW > 1.0f)
-        {
-            // Gradient: dim cyan at low levels → bright cyan → amber near 0dBFS
-            juce::ColourGradient grad(
-                juce::Colour(0xff006677), (float)meterX, 0.0f,
-                juce::Colour(0xffffaa00), (float)(meterX + meterW), 0.0f,
-                false);
-            grad.addColour(0.75, Theme::accent);
-
-            g.setGradientFill(grad);
-            g.fillRoundedRectangle((float)meterX + 1.0f, (float)meterY + 1.0f,
-                                   fillW - 2.0f, (float)meterH - 2.0f, 1.5f);
-        }
-
-        // Level text (dB readout, only when signal present)
-        g.setFont(juce::Font(8.0f));
-        if (sidechainIsActive)
-        {
-            juce::String dbStr = juce::String((int)sidechainLevelDB) + " dB";
-            g.setColour(Theme::textSecond);
-            g.drawText(dbStr, meterX + meterW + 4, meterY - 1, 36, 12,
-                       juce::Justification::centredLeft);
-        }
-        else
-        {
-            g.setColour(Theme::textDim);
-            g.drawText("no signal", meterX + meterW + 4, meterY - 1, 52, 12,
-                       juce::Justification::centredLeft);
-        }
-    }
-
-    // Version
-    g.setFont(juce::Font(8.0f));
-    g.setColour(Theme::textDim);
-    g.drawText("v0.3", w - 36, h - 14, 30, 12, juce::Justification::centredRight);
-
-    // Control panel background — spans the two control rows
-    const int panelTop = kHeaderH + kMargin + kDisplayH + kMargin;
-    const int panelH   = h - panelTop - kMargin;
-    g.setColour(Theme::panelBg);
-    g.fillRoundedRectangle((float)kMargin, (float)panelTop,
-                           (float)(w - kMargin * 2), (float)panelH, 6.0f);
-    g.setColour(Theme::panelBorder);
-    g.drawRoundedRectangle((float)kMargin + 0.5f, (float)panelTop + 0.5f,
-                           (float)(w - kMargin * 2) - 1.0f, (float)panelH - 1.0f, 6.0f, 1.0f);
-
-    // --- Section dividers and labels ---
-    // Layout: 9 controls in a 2-row grid.
-    // Row 1 (top, knobs): Depth | Q | Harmonics | Attack | Release | Mix | OutGain  (7 knobs)
-    // Row 2 (bottom, small controls): Smoothing | SnapToNote | FreqLock  (left aligned)
-    // Dividers split EQ section (cols 0-2) from Dynamics (3-4) from Output (5-6)
-
-    const int totalW  = w - kMargin * 2;
-    const int col7    = totalW / 7; // 7-column grid for row 1
-
-    const int row1Top = panelTop + kSectionLabelH;
-
-    // Vertical dividers
-    g.setColour(Theme::panelBorder);
-    // After EQ (after col 2): x = kMargin + col7*3
-    g.drawVerticalLine(kMargin + col7 * 3,
-                       panelTop + 4, panelTop + panelH - 4);
-    // After Dynamics (after col 4): x = kMargin + col7*5
-    g.drawVerticalLine(kMargin + col7 * 5,
-                       panelTop + 4, panelTop + panelH - 4);
-
-    // Section labels centred over their column groups
-    auto drawSect = [&](const juce::String& t, int x, int cols)
-    {
-        g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 8.0f, juce::Font::bold));
-        g.setColour(Theme::textDim);
-        g.drawText(t, x, panelTop + 3, cols * col7, kSectionLabelH - 2,
-                   juce::Justification::centred);
-    };
-    drawSect("EQ",        kMargin,                3);
-    drawSect("DYNAMICS",  kMargin + col7 * 3,     2);
-    drawSect("OUTPUT",    kMargin + col7 * 5,     2);
+    g.fillAll(KDTheme::bgBottom); // covers any rounding gap at odd window sizes
 }
 
-//==============================================================================
 void KickDuckerAudioProcessorEditor::resized()
 {
-    const int w = getWidth();
-    const int h = getHeight();
-
-    // EQ display
-    eqDisplay.setBounds(kMargin, kHeaderH + kMargin,
-                        w - kMargin * 2, kDisplayH);
-
-    // Bypass button — header top right
-    bypassButton.setBounds(w - 80, (kHeaderH - 22) / 2, 72, 22);
-
-    // Control panel geometry
-    const int panelTop  = kHeaderH + kMargin + kDisplayH + kMargin;
-    const int panelH    = h - panelTop - kMargin;
-    const int totalW    = w - kMargin * 2;
-    const int col7      = totalW / 7;
-    const int innerPad  = 5;
-
-    // Row 1: 7 knobs across the full width
-    // EQ: Depth(0), Q(1), Harmonics(2) | Dynamics: Attack(3), Release(4) | Output: Mix(5), OutGain(6)
-    const int row1Top  = panelTop + kSectionLabelH + innerPad;
-    const int row1H    = kKnobH;
-
-    auto knobBounds = [&](int colIdx) {
-        return juce::Rectangle<int>(
-            kMargin + colIdx * col7 + innerPad,
-            row1Top,
-            col7 - innerPad * 2,
-            row1H);
-    };
-    // Labels sit BELOW the slider bounds (which include the text box at bottom).
-    // Previously they were placed inside the slider rect and overlapped the
-    // value text — fixed by placing them 2px below the bottom of the slider.
-    auto labelBounds = [&](int colIdx) {
-        return juce::Rectangle<int>(
-            kMargin + colIdx * col7,
-            row1Top + row1H + 2,
-            col7,
-            kLabelH);
-    };
-
-    // EQ group
-    attenuationSlider .setBounds(knobBounds(0)); attenuationLabel .setBounds(labelBounds(0));
-    qWidthSlider      .setBounds(knobBounds(1)); qWidthLabel      .setBounds(labelBounds(1));
-    harmonicAmtSlider .setBounds(knobBounds(2)); harmonicAmtLabel .setBounds(labelBounds(2));
-
-    // Dynamics group
-    attackSlider      .setBounds(knobBounds(3)); attackLabel      .setBounds(labelBounds(3));
-    releaseSlider     .setBounds(knobBounds(4)); releaseLabel     .setBounds(labelBounds(4));
-
-    // Output group
-    mixSlider         .setBounds(knobBounds(5)); mixLabel         .setBounds(labelBounds(5));
-    outputGainSlider  .setBounds(knobBounds(6)); outputGainLabel  .setBounds(labelBounds(6));
-
-    // Row 2: detection controls — sits below knob row, left-aligned
-    // Smoothing knob | Snap toggle | Lock button
-    const int row2Top = row1Top + row1H + innerPad + 2;
-    const int row2H   = panelH - kSectionLabelH - row1H - innerPad * 3 - 4;
-
-    // Smoothing knob takes first column, smaller
-    const int smallKnobW = col7 - innerPad * 2;
-    smoothingSlider.setBounds(kMargin + innerPad, row2Top, smallKnobW, row2H - kLabelH);
-    smoothingLabel .setBounds(kMargin, row2Top + row2H - kLabelH - 2, col7, kLabelH);
-
-    // Note quantize toggle — col 1
-    const int toggleH = (row2H - 4) / 2;
-    noteQuantizeButton.setBounds(kMargin + col7 + innerPad, row2Top,
-                                 col7 * 2 - innerPad * 2, toggleH);
-
-    // Freq lock button — below snap toggle in same columns
-    freqLockButton.setBounds(kMargin + col7 + innerPad, row2Top + toggleH + 4,
-                             col7 * 2 - innerPad * 2, toggleH);
+    const float scale = (float) getWidth() / (float) kBaseW;
+    content.setTransform(juce::AffineTransform::scale(scale));
+    content.setBounds(0, 0, kBaseW, kBaseH);
 }
 
 //==============================================================================
-void KickDuckerAudioProcessorEditor::setupRotary(juce::Slider& slider,
-                                                  juce::Label& label,
+void KickDuckerAudioProcessorEditor::Content::paint(juce::Graphics& g)
+{
+    using namespace KDTheme;
+
+    // Background
+    g.setGradientFill(juce::ColourGradient(bgTop, 0.0f, 0.0f, bgBottom, 0.0f, (float) kBaseH, false));
+    g.fillAll();
+
+    // Header
+    g.setColour(headerBg);
+    g.fillRect(0, 0, kBaseW, kHeaderH);
+    g.setColour(border);
+    g.drawHorizontalLine(kHeaderH - 1, 0.0f, (float) kBaseW);
+
+    // Logo mark: a little notch curve in a rounded tile
+    const juce::Rectangle<float> mark((float) kMargin, 12.0f, 28.0f, 28.0f);
+    g.setColour(displayTop);
+    g.fillRoundedRectangle(mark, 7.0f);
+    g.setColour(accent.withAlpha(0.55f));
+    g.drawRoundedRectangle(mark.reduced(0.5f), 7.0f, 1.0f);
+
+    const auto m = mark.reduced(6.0f, 8.5f);
+    juce::Path notch;
+    notch.startNewSubPath(m.getX(), m.getY());
+    notch.cubicTo(m.getX() + m.getWidth() * 0.30f, m.getY(),
+                  m.getX() + m.getWidth() * 0.34f, m.getBottom(), m.getCentreX(), m.getBottom());
+    notch.cubicTo(m.getX() + m.getWidth() * 0.66f, m.getBottom(),
+                  m.getX() + m.getWidth() * 0.70f, m.getY(), m.getRight(), m.getY());
+    g.setColour(accent);
+    g.strokePath(notch, juce::PathStrokeType(1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+    // Wordmark
+    g.setFont(makeFont(15.0f, true, 0.14f));
+    g.setColour(textPrimary);
+    g.drawText("KICK DUCKER", 52, 9, 200, 20, juce::Justification::centredLeft);
+    g.setFont(makeFont(9.0f, true, 0.16f));
+    g.setColour(textDim);
+    g.drawText("SIDECHAIN NOTCH   v0.3", 52, 29, 200, 12, juce::Justification::centredLeft);
+
+    // Cards
+    static const char* titles[3] = { "TRACKING", "NOTCH", "OUTPUT" };
+    for (int i = 0; i < 3; ++i)
+    {
+        const auto r = cardBounds(i).toFloat();
+
+        g.setGradientFill(juce::ColourGradient(cardTop, 0.0f, r.getY(), cardBottom, 0.0f, r.getBottom(), false));
+        g.fillRoundedRectangle(r, 10.0f);
+        g.setColour(border);
+        g.drawRoundedRectangle(r.reduced(0.5f), 10.0f, 1.0f);
+
+        g.setColour(accent.withAlpha(0.85f));
+        g.fillRoundedRectangle(r.getX() + 12.0f, r.getY() + 13.0f, 3.0f, 11.0f, 1.5f);
+        g.setFont(makeFont(10.0f, true, 0.18f));
+        g.setColour(textSecondary);
+        g.drawText(titles[i], juce::Rectangle<float>(r.getX() + 22.0f, r.getY() + 8.0f, 140.0f, 20.0f),
+                   juce::Justification::centredLeft);
+    }
+}
+
+//==============================================================================
+void KickDuckerAudioProcessorEditor::placeKnob(int card, int slot, juce::Slider& slider, juce::Label& label)
+{
+    const auto c = cardBounds(card);
+    const int  x = c.getX() + slot * kUnit;
+
+    label .setBounds(x,     c.getY() + 30, kUnit,     14);
+    slider.setBounds(x + 4, c.getY() + 46, kUnit - 8, 96);
+}
+
+void KickDuckerAudioProcessorEditor::setupRotary(juce::Slider& slider, juce::Label& label,
                                                   const juce::String& labelText,
-                                                  const juce::String& suffix)
+                                                  const juce::String& tooltip,
+                                                  KnobStyle style)
 {
     slider.setSliderStyle(juce::Slider::RotaryVerticalDrag);
-    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 58, 13);
-
-    slider.setColour(juce::Slider::rotarySliderFillColourId,    Theme::accent);
-    slider.setColour(juce::Slider::rotarySliderOutlineColourId, juce::Colour(0xff222238));
-    slider.setColour(juce::Slider::thumbColourId,               juce::Colours::white);
-    slider.setColour(juce::Slider::textBoxTextColourId,         Theme::textSecond);
-    slider.setColour(juce::Slider::textBoxOutlineColourId,      juce::Colours::transparentBlack);
-    slider.setColour(juce::Slider::textBoxBackgroundColourId,   juce::Colours::transparentBlack);
-
-    if (suffix.isNotEmpty()) slider.setTextValueSuffix(suffix);
-    addAndMakeVisible(slider);
+    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 76, 18);
+    slider.setRotaryParameters(juce::MathConstants<float>::pi * 1.25f,
+                               juce::MathConstants<float>::pi * 2.75f, true);
+    slider.setMouseDragSensitivity(180);
+    slider.setTooltip(tooltip);
+    slider.getProperties().set("bipolar", style == KnobStyle::Bipolar);
+    slider.getProperties().set("invert",  style == KnobStyle::Inverted);
+    content.addAndMakeVisible(slider);
 
     label.setText(labelText, juce::dontSendNotification);
-    label.setFont(juce::Font(9.0f));
+    label.setFont(KDTheme::makeFont(10.0f, true, 0.14f));
     label.setJustificationType(juce::Justification::centred);
-    label.setColour(juce::Label::textColourId, Theme::textSecond);
-    addAndMakeVisible(label);
+    label.setColour(juce::Label::textColourId, KDTheme::textSecondary);
+    label.setTooltip(tooltip);
+    content.addAndMakeVisible(label);
 }
 
-void KickDuckerAudioProcessorEditor::setupToggle(juce::ToggleButton& button)
+void KickDuckerAudioProcessorEditor::setupChip(juce::TextButton& button, juce::Colour onColour,
+                                                const juce::String& tooltip)
 {
-    button.setColour(juce::ToggleButton::textColourId,        Theme::textSecond);
-    button.setColour(juce::ToggleButton::tickColourId,        Theme::accent);
-    button.setColour(juce::ToggleButton::tickDisabledColourId,Theme::textDim);
-    addAndMakeVisible(button);
-}
-
-void KickDuckerAudioProcessorEditor::drawSectionLabel(juce::Graphics& g,
-                                                       const juce::String& text,
-                                                       juce::Rectangle<int> bounds)
-{
-    g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), 8.0f, juce::Font::bold));
-    g.setColour(Theme::textDim);
-    g.drawText(text, bounds, juce::Justification::centred);
+    button.setClickingTogglesState(true);
+    button.setColour(juce::TextButton::buttonOnColourId, onColour);
+    button.setTooltip(tooltip);
+    content.addAndMakeVisible(button);
 }

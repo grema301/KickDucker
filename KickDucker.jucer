@@ -5,6 +5,7 @@
               companyName="MSG" companyWebsite="https://grema301.github.io/personal_site/">
   <MAINGROUP id="OqGkYP" name="KickDucker">
     <GROUP id="{7D7E1B91-D379-B452-AE73-BFC90979DB04}" name="Source">
+      <FILE id="RC9P3c" name="KickDuckerUI.h" compile="0" resource="0" file="Source/KickDuckerUI.h"/>
       <FILE id="Rr4z4g" name="EQDisplay.h" compile="0" resource="0" file="Source/EQDisplay.h"/>
       <FILE id="nPIyAw" name="BiquadFilter.h" compile="0" resource="0" file="Source/BiquadFilter.h"/>
       <FILE id="DoaGyL" name="PitchDetector.h" compile="0" resource="0" file="Source/PitchDetector.h"/>
